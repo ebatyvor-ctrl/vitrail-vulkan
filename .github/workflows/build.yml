@@ -10,18 +10,18 @@ on:
 
 jobs:
   build:
-    name: Build Vitrail Fabric (1.21.10)
+    name: Build Vitrail Fabric (1.21.10 Java 21)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25
+      - name: Set up JDK 21 (PojavLauncher Compatibility)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: '21'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -29,10 +29,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Mod with Gradle
-        run: ./gradlew assemble --no-daemon
+      - name: Enforce Java 21 Bytecode Target (Class 65.0)
+        run: |
+          sed -i 's/java_version=.*/java_version=21/g' gradle.properties
+          grep "java_version" gradle.properties
 
-      - name: Prepare Single Fabric Jar for PojavLauncher
+      - name: Build Mod with Gradle
+        run: ./gradlew assemble -Pjava_version=21 --no-daemon
+
+      - name: Prepare Single Fabric Jar for PojavLauncher (1.21.10)
         run: |
           mkdir -p output
           FABRIC_JAR=$(ls build/libs/*fabric*.jar 2>/dev/null | head -n 1)
@@ -46,7 +51,6 @@ jobs:
           TARGET="output/vitrail-fabric-1.21.10.jar"
           cp "$FABRIC_JAR" "$TARGET"
 
-          # Адаптируем fabric.mod.json для Fabric Loader 0.19.2 в PojavLauncher
           mkdir -p tmp_unpack
           cd tmp_unpack
           jar -xf "../$TARGET"
@@ -59,6 +63,9 @@ jobs:
           fi
           cd ..
           rm -rf tmp_unpack
+
+          echo "=== Готов jar для PojavLauncher (Java 21 / Class 65.0) ==="
+          ls -la "$TARGET"
 
       - name: Upload Single Fabric Mod Jar
         uses: actions/upload-artifact@v4
