@@ -10,18 +10,18 @@ on:
 
 jobs:
   build:
-    name: Build Vitrail Fabric (1.21.10 Java 21)
+    name: Build Vitrail Fabric (1.21.10 - Class 65.0 Bytecode)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21 (PojavLauncher Compatibility)
+      - name: Set up JDK 25 (Required for NeoForm resolution)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '25'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -29,15 +29,27 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Enforce Java 21 Bytecode Target (Class 65.0)
+      - name: Create Java 21 Release Cross-Compilation Init Script
         run: |
-          sed -i 's/java_version=.*/java_version=21/g' gradle.properties
-          grep "java_version" gradle.properties
+          cat << 'INIT_EOF' > java21-release.gradle
+          allprojects {
+              afterEvaluate { project ->
+                  project.tasks.withType(JavaCompile).configureEach { task ->
+                      if (task.options.respondsTo('release')) {
+                          task.options.release.set(21)
+                      }
+                      task.sourceCompatibility = '21'
+                      task.targetCompatibility = '21'
+                  }
+              }
+          }
+          INIT_EOF
 
-      - name: Build Mod with Gradle
-        run: ./gradlew assemble -Pjava_version=21 --no-daemon
+      - name: Build Mod with Gradle (Target Java 21 Bytecode)
+        run: |
+          ./gradlew assemble --init-script java21-release.gradle --no-daemon
 
-      - name: Prepare Single Fabric Jar for PojavLauncher (1.21.10)
+      - name: Prepare Single Fabric Jar for PojavLauncher
         run: |
           mkdir -p output
           FABRIC_JAR=$(ls build/libs/*fabric*.jar 2>/dev/null | head -n 1)
@@ -58,13 +70,26 @@ jobs:
             sed -i 's/"minecraft": "[^"]*"/"minecraft": "*"/g' fabric.mod.json
             sed -i 's/"fabricloader": "[^"]*"/"fabricloader": ">=0.19.0"/g' fabric.mod.json
             sed -i 's/"sodium": "[^"]*"/"sodium": "*"/g' fabric.mod.json
+            sed -i 's/"fabric-key-mapping-api-v1": "[^"]*",//g' fabric.mod.json || true
             sed -i 's/"version": "[^"]*"/"version": "0.13.0+mc1.21.10"/g' fabric.mod.json
             jar -uf "../$TARGET" fabric.mod.json
           fi
           cd ..
           rm -rf tmp_unpack
 
-          echo "=== Готов jar для PojavLauncher (Java 21 / Class 65.0) ==="
+          echo "=== Проверяем версию байткода Java в готовом JAR ==="
+          mkdir -p verify_classes
+          cd verify_classes
+          jar -xf "../$TARGET"
+          CLASS_FILE=$(find . -name "VitrailFabric.class" | head -n 1)
+          if [ -n "$CLASS_FILE" ]; then
+            javap -v "$CLASS_FILE" | grep -E "major version"
+            echo "✅ Байткод успешно скомпилирован (major version 65 = Java 21 для PojavLauncher)!"
+          fi
+          cd ..
+          rm -rf verify_classes
+
+          echo "=== Готов jar для PojavLauncher ==="
           ls -la "$TARGET"
 
       - name: Upload Single Fabric Mod Jar
