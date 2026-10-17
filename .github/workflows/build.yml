@@ -55,7 +55,6 @@ jobs:
           echo "=== Найденные JAR файлы ==="
           find . -name "*.jar" -not -path "*/.*" -not -path "*/gradle/*"
 
-          # Выбираем строго ремапнутый продакшн Fabric jar (исключая dev и sources)
           FABRIC_JAR=$(find fabric/build/libs build/libs -name "*fabric*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | head -n 1)
           if [ -z "$FABRIC_JAR" ]; then
             FABRIC_JAR=$(find fabric/build/libs build/libs -name "*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | grep -v "common" | head -n 1)
@@ -65,7 +64,6 @@ jobs:
           TARGET="output/vitrail-fabric-1.21.10.jar"
           cp "$FABRIC_JAR" "$TARGET"
 
-          # Адаптируем fabric.mod.json для Fabric Loader 0.19.2 в PojavLauncher
           mkdir -p tmp_unpack
           cd tmp_unpack
           jar -xf "../$TARGET"

@@ -477,3 +477,13 @@ tasks.register("collectJars", Copy) {
 tasks.named("assemble") {
 	dependsOn tasks.named("mergedJar"), tasks.named("collectJars")
 }
+
+allprojects {
+    tasks.withType(JavaCompile).configureEach {
+        if (options.respondsTo('release')) {
+            options.release.set(21)
+        }
+        sourceCompatibility = '21'
+        targetCompatibility = '21'
+    }
+}
