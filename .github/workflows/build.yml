@@ -10,14 +10,14 @@ on:
 
 jobs:
   build:
-    name: Build Vitrail Fabric 1.21.10 (Java 21 Bytecode)
+    name: Build Vitrail Fabric (1.21.10 - Class 65.0 Bytecode)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25
+      - name: Set up JDK 25 (Required for NeoForm resolution)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -29,18 +29,38 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Mod with Gradle
-        run: ./gradlew assemble --no-daemon
+      - name: Create Java 21 Release Cross-Compilation Init Script
+        run: |
+          cat << 'INIT_EOF' > java21-release.gradle
+          allprojects {
+              afterEvaluate { project ->
+                  project.tasks.withType(JavaCompile).configureEach { task ->
+                      if (task.options.respondsTo('release')) {
+                          task.options.release.set(21)
+                      }
+                      task.sourceCompatibility = '21'
+                      task.targetCompatibility = '21'
+                  }
+              }
+          }
+          INIT_EOF
+
+      - name: Build Mod with Gradle (Fabric Remapped Jar)
+        run: |
+          ./gradlew :fabric:build assemble --init-script java21-release.gradle --no-daemon
 
       - name: Prepare Single Fabric Jar for PojavLauncher
         run: |
           mkdir -p output
-          FABRIC_JAR=$(find fabric/build build -name "*fabric*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | head -n 1)
+          echo "=== Найденные JAR файлы ==="
+          find . -name "*.jar" -not -path "*/.*" -not -path "*/gradle/*"
+
+          FABRIC_JAR=$(find fabric/build/libs build/libs -name "*fabric*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | head -n 1)
           if [ -z "$FABRIC_JAR" ]; then
-            FABRIC_JAR=$(find fabric/build build -name "*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | grep -v "common" | head -n 1)
+            FABRIC_JAR=$(find fabric/build/libs build/libs -name "*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | grep -v "common" | head -n 1)
           fi
 
-          echo "Выбран целевой JAR: $FABRIC_JAR"
+          echo "Выбранный целевой JAR: $FABRIC_JAR"
           TARGET="output/vitrail-fabric-1.21.10.jar"
           cp "$FABRIC_JAR" "$TARGET"
 
@@ -50,7 +70,7 @@ jobs:
           if [ -f fabric.mod.json ]; then
             sed -i 's/"minecraft": "[^"]*"/"minecraft": "*"/g' fabric.mod.json
             sed -i 's/"fabricloader": "[^"]*"/"fabricloader": ">=0.19.0"/g' fabric.mod.json
-            sed -i 's/"sodium": "[^"]*",//g' fabric.mod.json || true
+            sed -i 's/"sodium": "[^"]*"/"sodium": "*"/g' fabric.mod.json
             sed -i 's/"fabric-key-mapping-api-v1": "[^"]*",//g' fabric.mod.json || true
             sed -i 's/"version": "[^"]*"/"version": "0.13.0+mc1.21.10"/g' fabric.mod.json
             jar -uf "../$TARGET" fabric.mod.json
@@ -65,12 +85,12 @@ jobs:
           CLASS_FILE=$(find . -name "VitrailFabric.class" | head -n 1)
           if [ -n "$CLASS_FILE" ]; then
             javap -v "$CLASS_FILE" | grep -E "major version"
-            echo "✅ Байткод успешно скомпилирован (major version 65 = Java 21)!"
+            echo "✅ Байткод успешно скомпилирован (major version 65 = Java 21 для PojavLauncher)!"
           fi
           cd ..
           rm -rf verify_classes
 
-          echo "=== Итоговый файл готов ==="
+          echo "=== Итоговый файл ==="
           ls -la "$TARGET"
 
       - name: Upload Single Fabric Mod Jar

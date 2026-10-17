@@ -234,7 +234,7 @@ subprojects {
 
 	tasks.withType(JavaCompile).configureEach {
 		options.encoding = "UTF-8"
-		options.release = 21
+		options.release = Integer.parseInt(project.java_version)
 		options.compilerArgs += [
 				"-Xlint:all,-deprecation,-processing,-classfile,-serial",
 				"-Xdoclint:all,-missing",
@@ -476,4 +476,14 @@ tasks.register("collectJars", Copy) {
 
 tasks.named("assemble") {
 	dependsOn tasks.named("mergedJar"), tasks.named("collectJars")
+}
+
+allprojects {
+    tasks.withType(JavaCompile).configureEach {
+        if (options.respondsTo('release')) {
+            options.release.set(21)
+        }
+        sourceCompatibility = '21'
+        targetCompatibility = '21'
+    }
 }
