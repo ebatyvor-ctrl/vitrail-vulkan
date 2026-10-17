@@ -1,18 +1,69 @@
 name: build
-on: [push, pull_request, workflow_dispatch]
+
+on:
+  push:
+    branches:
+      - fabric-1.21.10
+      - main
+  pull_request:
+  workflow_dispatch:
+
 jobs:
   build:
-    name: Build Vitrail 1.21.10
+    name: Build Vitrail Fabric (1.21.10)
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@v3
-      - run: chmod +x gradlew && ./gradlew build --stacktrace
-      - uses: actions/upload-artifact@v4
+          java-version: '25'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Mod with Gradle
+        run: ./gradlew assemble --no-daemon
+
+      - name: Prepare Single Fabric Jar for PojavLauncher
+        run: |
+          mkdir -p output
+          FABRIC_JAR=$(ls build/libs/*fabric*.jar 2>/dev/null | head -n 1)
+          if [ -z "$FABRIC_JAR" ]; then
+            FABRIC_JAR=$(ls fabric/build/libs/*.jar 2>/dev/null | head -n 1)
+          fi
+          if [ -z "$FABRIC_JAR" ]; then
+            FABRIC_JAR=$(ls build/libs/*.jar | head -n 1)
+          fi
+
+          TARGET="output/vitrail-fabric-1.21.10.jar"
+          cp "$FABRIC_JAR" "$TARGET"
+
+          # Адаптируем fabric.mod.json для Fabric Loader 0.19.2 в PojavLauncher
+          mkdir -p tmp_unpack
+          cd tmp_unpack
+          jar -xf "../$TARGET"
+          if [ -f fabric.mod.json ]; then
+            sed -i 's/"minecraft": "[^"]*"/"minecraft": "*"/g' fabric.mod.json
+            sed -i 's/"fabricloader": "[^"]*"/"fabricloader": ">=0.19.0"/g' fabric.mod.json
+            sed -i 's/"sodium": "[^"]*"/"sodium": "*"/g' fabric.mod.json
+            sed -i 's/"version": "[^"]*"/"version": "0.13.0+mc1.21.10"/g' fabric.mod.json
+            jar -uf "../$TARGET" fabric.mod.json
+          fi
+          cd ..
+          rm -rf tmp_unpack
+
+      - name: Upload Single Fabric Mod Jar
+        uses: actions/upload-artifact@v4
         with:
           name: vitrail-fabric-1.21.10
-          path: build/libs/*[!sources][!dev].jar
+          path: output/vitrail-fabric-1.21.10.jar
+          if-no-files-found: error
+          retention-days: 30
