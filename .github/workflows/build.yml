@@ -45,24 +45,27 @@ jobs:
           }
           INIT_EOF
 
-      - name: Build Mod with Gradle (Target Java 21 Bytecode)
+      - name: Build Mod with Gradle (Fabric Remapped Jar)
         run: |
-          ./gradlew assemble --init-script java21-release.gradle --no-daemon
+          ./gradlew :fabric:build assemble --init-script java21-release.gradle --no-daemon
 
       - name: Prepare Single Fabric Jar for PojavLauncher
         run: |
           mkdir -p output
-          FABRIC_JAR=$(ls build/libs/*fabric*.jar 2>/dev/null | head -n 1)
+          echo "=== Найденные JAR файлы ==="
+          find . -name "*.jar" -not -path "*/.*" -not -path "*/gradle/*"
+
+          # Выбираем строго ремапнутый продакшн Fabric jar (исключая dev и sources)
+          FABRIC_JAR=$(find fabric/build/libs build/libs -name "*fabric*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | head -n 1)
           if [ -z "$FABRIC_JAR" ]; then
-            FABRIC_JAR=$(ls fabric/build/libs/*.jar 2>/dev/null | head -n 1)
-          fi
-          if [ -z "$FABRIC_JAR" ]; then
-            FABRIC_JAR=$(ls build/libs/*.jar | head -n 1)
+            FABRIC_JAR=$(find fabric/build/libs build/libs -name "*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | grep -v "common" | head -n 1)
           fi
 
+          echo "Выбранный целевой JAR: $FABRIC_JAR"
           TARGET="output/vitrail-fabric-1.21.10.jar"
           cp "$FABRIC_JAR" "$TARGET"
 
+          # Адаптируем fabric.mod.json для Fabric Loader 0.19.2 в PojavLauncher
           mkdir -p tmp_unpack
           cd tmp_unpack
           jar -xf "../$TARGET"
@@ -89,7 +92,7 @@ jobs:
           cd ..
           rm -rf verify_classes
 
-          echo "=== Готов jar для PojavLauncher ==="
+          echo "=== Итоговый файл ==="
           ls -la "$TARGET"
 
       - name: Upload Single Fabric Mod Jar
