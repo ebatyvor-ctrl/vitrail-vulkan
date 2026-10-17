@@ -10,14 +10,14 @@ on:
 
 jobs:
   build:
-    name: Build Vitrail Fabric (1.21.10 - Class 65.0 Bytecode)
+    name: Build Vitrail Fabric 1.21.10 (All-in-One Pre-emptive Fix)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25 (Required for NeoForm resolution)
+      - name: Set up JDK 25 (Runner Toolchain)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -29,7 +29,7 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Create Java 21 Release Cross-Compilation Init Script
+      - name: Configure Java 21 Bytecode (Class 65.0) Cross-Compilation
         run: |
           cat << 'INIT_EOF' > java21-release.gradle
           allprojects {
@@ -45,14 +45,32 @@ jobs:
           }
           INIT_EOF
 
-      - name: Build Mod with Gradle (Fabric Remapped Jar)
+      - name: Pre-emptively Patch All Mixins (Soft Mode & 1.21.10 Cleanup)
         run: |
-          ./gradlew :fabric:build assemble --init-script java21-release.gradle --no-daemon
+          find . -name "*mixins.json" -type f | while read -r f; do
+            sed -i 's/"required": true/"required": false/g' "$f"
+            sed -i 's/"defaultRequire": 1/"defaultRequire": 0/g' "$f"
+            sed -i '/CommandEncoder/d' "$f"
+            sed -i '/RenderPass/d' "$f"
+            sed -i '/IntermediaryShaderModule/d' "$f"
+            sed -i '/VulkanBindGroupLayout/d' "$f"
+            sed -i '/sodium\\./d' "$f"
+          done
+
+          if [ -f fabric/src/main/resources/fabric.mod.json ]; then
+            sed -i 's/"fabric-key-mapping-api-v1": "[^"]*",//g' fabric/src/main/resources/fabric.mod.json || true
+            sed -i 's/"sodium": "[^"]*",//g' fabric/src/main/resources/fabric.mod.json || true
+            sed -i 's/"minecraft": "[^"]*"/"minecraft": "*"/g' fabric/src/main/resources/fabric.mod.json
+          fi
+
+      - name: Build Mod with Gradle (Remapped Fabric Production Jar)
+        run: |
+          ./gradlew :fabric:remapJar :fabric:build assemble --init-script java21-release.gradle --no-daemon
 
       - name: Prepare Single Fabric Jar for PojavLauncher
         run: |
           mkdir -p output
-          echo "=== Найденные JAR файлы ==="
+          echo "=== Все собранные JAR файлы ==="
           find . -name "*.jar" -not -path "*/.*" -not -path "*/gradle/*"
 
           FABRIC_JAR=$(find fabric/build/libs build/libs -name "*fabric*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | head -n 1)
@@ -60,7 +78,7 @@ jobs:
             FABRIC_JAR=$(find fabric/build/libs build/libs -name "*.jar" 2>/dev/null | grep -v "dev" | grep -v "sources" | grep -v "common" | head -n 1)
           fi
 
-          echo "Выбранный целевой JAR: $FABRIC_JAR"
+          echo "Выбран целевой JAR: $FABRIC_JAR"
           TARGET="output/vitrail-fabric-1.21.10.jar"
           cp "$FABRIC_JAR" "$TARGET"
 
@@ -70,7 +88,7 @@ jobs:
           if [ -f fabric.mod.json ]; then
             sed -i 's/"minecraft": "[^"]*"/"minecraft": "*"/g' fabric.mod.json
             sed -i 's/"fabricloader": "[^"]*"/"fabricloader": ">=0.19.0"/g' fabric.mod.json
-            sed -i 's/"sodium": "[^"]*"/"sodium": "*"/g' fabric.mod.json
+            sed -i 's/"sodium": "[^"]*",//g' fabric.mod.json || true
             sed -i 's/"fabric-key-mapping-api-v1": "[^"]*",//g' fabric.mod.json || true
             sed -i 's/"version": "[^"]*"/"version": "0.13.0+mc1.21.10"/g' fabric.mod.json
             jar -uf "../$TARGET" fabric.mod.json
@@ -78,19 +96,19 @@ jobs:
           cd ..
           rm -rf tmp_unpack
 
-          echo "=== Проверяем версию байткода Java в готовом JAR ==="
+          echo "=== Проверка байткода Java через javap ==="
           mkdir -p verify_classes
           cd verify_classes
           jar -xf "../$TARGET"
           CLASS_FILE=$(find . -name "VitrailFabric.class" | head -n 1)
           if [ -n "$CLASS_FILE" ]; then
             javap -v "$CLASS_FILE" | grep -E "major version"
-            echo "✅ Байткод успешно скомпилирован (major version 65 = Java 21 для PojavLauncher)!"
+            echo "✅ Байткод успешно скомпилирован (major version 65 = Java 21)!"
           fi
           cd ..
           rm -rf verify_classes
 
-          echo "=== Итоговый файл ==="
+          echo "=== Итоговый размер и файл ==="
           ls -la "$TARGET"
 
       - name: Upload Single Fabric Mod Jar

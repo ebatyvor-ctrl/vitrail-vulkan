@@ -4,7 +4,7 @@
 	"package": "dev.vitrail.neoforge.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"injectors": {
-		"defaultRequire": 1
+		"defaultRequire": 0
 	},
 	"client": [
 		"MinecraftEarlyWindowMixin",

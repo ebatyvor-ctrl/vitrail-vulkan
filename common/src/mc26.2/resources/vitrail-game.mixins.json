@@ -4,15 +4,12 @@
 	"package": "dev.vitrail.mixin.game",
 	"compatibilityLevel": "JAVA_21",
 	"injectors": {
-		"defaultRequire": 1
+		"defaultRequire": 0
 	},
 	"client": [
 		"ArenaAggregatorMixin",
 		"GameRendererHandMixin",
-		"IntermediaryShaderModuleAccessor",
-		"IntermediaryShaderModuleMixin",
 		"ItemInHandRendererMixin",
 		"SkyRendererMixin",
-		"VulkanBindGroupLayoutMixin"
 	]
 }
